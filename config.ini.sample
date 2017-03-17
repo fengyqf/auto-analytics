@@ -1,0 +1,11 @@
+[main]
+debug=0
+cache_file_name=.cache.txt
+
+
+[umeng]
+email=yourname@domain.com
+password=your-password
+
+
+
