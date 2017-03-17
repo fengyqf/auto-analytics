@@ -10,6 +10,7 @@ import urllib
 import urllib2
 import pickle
 import json
+import base64
 
 
 
@@ -40,7 +41,8 @@ except:
 
 try:
     cache['umeng__auth_token']
-    print 'auth cache loaded: ',cache['umeng__auth_token']
+    cache['umeng__Authorization']
+    print 'auth cache loaded: ', cache['umeng__auth_token'], cache['umeng__Authorization']
 except:
     url="http://api.umeng.com/authorize"
     req=urllib2.Request(url,
@@ -52,10 +54,16 @@ except:
     try:
         response=json.loads(body_raw)
         cache['umeng__auth_token']=response['auth_token']
+        cache['umeng__Authorization']=base64.b64encode(cache['umeng__auth_token'])
         pickle.dump(cache,open(cfg['main']['cache_file_name'],'w+'))
         print 'auth token cached'
     except:
         print "error"
+
+
+
+
+
 
 
 sys.exit()
