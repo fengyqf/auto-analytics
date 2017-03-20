@@ -11,7 +11,7 @@ import urllib2
 import pickle
 import json
 import base64
-
+import MySQLdb as db
 
 
 script_dir=os.path.split(os.path.realpath(__file__))[0]+'/'
@@ -27,7 +27,13 @@ try:
     cfg['main']['cache_file_name']=cp.get('main','cache_file_name')
     cfg['umeng']['email']=cp.get('umeng','email')
     cfg['umeng']['password']=cp.get('umeng','password')
-    
+
+    cfg['mysql']={}
+    cfg['mysql']['host']=cp.get('mysql','host')
+    cfg['mysql']['user']=cp.get('mysql','user')
+    cfg['mysql']['password']=cp.get('mysql','password')
+    cfg['mysql']['db']=cp.get('mysql','db')
+
 except :
     #raise ConfigParser.NoOptionError(e)
     print "config.ini ERROR.  You can copy it from config.ini.sample "
@@ -60,6 +66,8 @@ except:
     except:
         print "error"
 
+
+conn=db.connect(cfg['mysql']['host'],cfg['mysql']['user'],cfg['mysql']['password'],cfg['mysql']['db'])
 
 
 

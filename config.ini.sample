@@ -8,4 +8,10 @@ email=yourname@domain.com
 password=your-password
 
 
+[mysql]
+host=127.0.0.1
+user=auto_analytics
+password=auto_analytics
+db=auto_analytics
+
 
