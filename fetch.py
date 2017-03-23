@@ -12,7 +12,6 @@ import pickle
 import json
 import base64
 import MySQLdb as db
-import datetime
 
 
 script_dir=os.path.split(os.path.realpath(__file__))[0]+'/'
@@ -75,7 +74,7 @@ req=urllib2.Request(url)
 req.add_header('Authorization','Basic %s' %(cache['umeng__Authorization']))
 
 body_raw=urllib2.urlopen(req).read()
-print body_raw
+#print body_raw
 response=json.loads(body_raw)
 
 for app in response:
@@ -85,13 +84,97 @@ for app in response:
 
 
 
+#日活
+
 today=datetime.date.today()
 date_end=today.strftime('%Y-%m-%d')
 date_start=(today-datetime.timedelta(days=5)).strftime('%Y-%m-%d')
 
 print date_start,date_end
 
+appkey='57317f1fe0f55a765300216c'
+api='active_users'
+
+def fetch_umeng(conn,appkey,api,date_start,date_end,args={}):
+    try:
+        period_type=args['period_type']
+    except:
+        period_type='daily'
+
+    args_s=''
+    args_keys=args.keys()
+    if args_keys:
+        for k in args_keys.sort():
+            args_s=args_s+'~'+k+'~'+args[k]
+    param_string='%s~%s~~%s'%(appkey,api,args_s)
+    hashing=hash(param_string)
+    print hashing
+    print param_string
+
+    days_count=(datetime.datetime.strptime(date_end, '%Y-%m-%d')-datetime.datetime.strptime(date_start, '%Y-%m-%d')).days
+    print "days_count: ",days_count
+
+    cursor=conn.cursor(cursorclass=db.cursors.DictCursor)
+    #检查  hash映射表中是否有当前对应记录，如无则插入
+    sql="select hashing,raw from hash_mapping where hashing='%s'"%(hashing)
+    cursor.execute(sql)
+    results=cursor.fetchall()
+    to_recache=1
+    if not results:
+        sql="insert into `hash_mapping`(hashing,raw) values(%s,%s)"
+        cursor.execute(sql,(hashing,param_string))
+
+    #查读最后一批的批号，根据此批号读数据
+    line=[]
+    sql="select max(batch) as max_batch from data where hashing='%s'" %(hashing)
+    cursor.execute(sql)
+    result=cursor.fetchone()
+    max_batch=result['max_batch']
+    sql="select `id`,`day`,`val` from data where hashing='%s' and `batch`='%s'\
+         and `day` > %s and `day` < %s order by `day` asc" %(
+        hashing,max_batch,date2int(date_start),date2int(date_end))
+    cursor.execute(sql)
+    results=cursor.fetchall()
+    if len(results)>=days_count:
+        to_recache=0
+    for row in results:
+        line.append({'id':row['id'],'day':row['day'],'val':row['val'],})
+
+    print line
+    print '----------------------'
+
+    url="http://api.umeng.com/%s?appkey=%s&period_type=%s&start_date=%s&end_date=%s"%(
+            api,appkey,period_type,date_start,date_end)
+    req=urllib2.Request(url)
+    req.add_header('Authorization','Basic %s' %(cache['umeng__Authorization']))
+    body_raw=urllib2.urlopen(req).read()
+    response=json.loads(body_raw)
+
+    #try:
+    if True:
+        items_label=response['dates']
+        for key in response['data']:
+            items_values=response['data'][key]
+        print items_label,items_values
+        values=[]
+        timestamp=int(time.time())
+        for i in range(len(items_label)):
+            values.append((hashing,items_values[i],timestamp,date2int(items_label[i])))
+        val_batch=tuple(values)
+        print val_batch
+        sql="""insert into `data` (`hashing`,`val`,`batch`,`day`)\
+            values(%s,%s,%s,%s)"""
+        cursor.executemany(sql,val_batch)
+    #except:
+    #    print "retrive data Error from response.json\n",response
 
 
+def date2int(txt):
+    d=datetime.datetime.strptime(txt, '%Y-%m-%d')
+    return d.year*10000+d.month*100+d.day
+
+def int2date(di):
+    return '%d-%02d-%02d'%(di/10000,di%1000/100,di%100)
 
 
+fetch_umeng(conn,appkey,api,date_start,date_end)
