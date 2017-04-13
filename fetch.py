@@ -85,6 +85,42 @@ for app in response:
 
 
 #日活
+def retrive_umeng(conn,appkey,api,date_start,date_end,args={}):
+
+    try:
+        period_type=args['period_type']
+    except:
+        period_type='daily'
+
+    url="http://api.umeng.com/%s?appkey=%s&period_type=%s&start_date=%s&end_date=%s"%(
+            api,appkey,period_type,date_start,date_end)
+    req=urllib2.Request(url)
+    req.add_header('Authorization','Basic %s' %(cache['umeng__Authorization']))
+    body_raw=urllib2.urlopen(req).read()
+    response=json.loads(body_raw)
+
+    #try:
+    if True:
+        items_label=response['dates']
+        for key in response['data']:
+            items_values=response['data'][key]
+        print items_label,items_values
+        values=[]
+        timestamp=int(time.time())
+        for i in range(len(items_label)):
+            values.append((hashing,items_values[i],timestamp,date2int(items_label[i])))
+        val_batch=tuple(values)
+        print val_batch
+        sql="""insert into `data` (`hashing`,`val`,`batch`,`day`)\
+            values(%s,%s,%s,%s)"""
+        cursor.executemany(sql,val_batch)
+    #except:
+    #    print "retrive data Error from response.json\n",response
+
+
+
+
+
 
 today=datetime.date.today()
 date_end=today.strftime('%Y-%m-%d')
@@ -143,6 +179,8 @@ def fetch_umeng(conn,appkey,api,date_start,date_end,args={}):
     print line
     print '----------------------'
 
+    #检查line中条数是否正确，忽略当日
+
     url="http://api.umeng.com/%s?appkey=%s&period_type=%s&start_date=%s&end_date=%s"%(
             api,appkey,period_type,date_start,date_end)
     req=urllib2.Request(url)
@@ -177,4 +215,6 @@ def int2date(di):
     return '%d-%02d-%02d'%(di/10000,di%1000/100,di%100)
 
 
-fetch_umeng(conn,appkey,api,date_start,date_end)
+#fetch_umeng(conn,appkey,api,date_start,date_end)
+
+retrive_umeng(conn,appkey,api,date_start,date_end)
