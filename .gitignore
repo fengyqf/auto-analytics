@@ -63,3 +63,6 @@ config.ini
 *.swp
 .cache.txt
 a_*.txt
+appconfig.py
+
+data/
