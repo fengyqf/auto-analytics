@@ -183,11 +183,11 @@ for it in cfg.um_source:
     date_end=today.strftime('%Y-%m-%d')
     print '\nAPP: [%s] %s'%(appkey,appname)
 
-    um_api='active_users'
-    filepath=script_dir+'data/'+applabel+'_'+um_api+'.csv'
-    header=['date','num']
 
-    fetch_and_save(um_api,filepath,header,date_start,date_end)
+    for um_api in ['new_users','active_users','launches']:
+        filepath=script_dir+'data/'+applabel+'_'+um_api+'.csv'
+        header=['date','num']
+        fetch_and_save(um_api,filepath,header,date_start,date_end)
 
 
 exit()
