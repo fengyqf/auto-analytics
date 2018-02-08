@@ -11,6 +11,7 @@ import pickle
 import json
 import base64
 import csv
+import math
 
 
 import appconfig as cfg
@@ -22,20 +23,16 @@ config_file=script_dir+'/config.ini'
 
 
 
-try:
-    cache=pickle.load(open(cfg['main']['cache_file_name'],'r'))
-except:
-    cache={}
-
 
 class Um_auth:
+    cache={}
     def __init__(self, cache_file,email,password):
         self.cache_file=cache_file
         self.email=email
         self.password=password
         try:
-            cache=pickle.load(open(cache_file,'r'))
-            self.Authorization=cache['umeng__Authorization']
+            Um_auth.cache=pickle.load(open(cache_file,'r'))
+            self.Authorization=Um_auth.cache['umeng__Authorization']
             self.check()
         except:
             self.re_auth()
@@ -43,10 +40,20 @@ class Um_auth:
     def check(self):
         url="http://api.umeng.com/apps/count"
         req=urllib2.Request(url)
-        req.add_header('Authorization','Basic %s' %(cache['umeng__Authorization']))
-        body_raw=urllib2.urlopen(req).read()
-        response=json.loads(body_raw)
-        print response
+        req.add_header('Authorization','Basic %s' %(Um_auth.cache['umeng__Authorization']))
+        try:
+            f=urllib2.urlopen(req)
+            body_raw=f.read()
+            response=json.loads(body_raw)
+            print "cached token Effective/Available.  ",response['count'] ,' Apps found'
+        except urllib2.HTTPError,e:
+            print e
+            self.re_auth()
+        except urllib2.URLError,e:
+            print e
+            self.re_auth()
+        except Exception as e:
+            print e
 
 
     def re_auth(self):
@@ -57,12 +64,12 @@ class Um_auth:
 
         body_raw=urllib2.urlopen(req).read()
         response=json.loads(body_raw)
-        cache['umeng__auth_token']=response['auth_token']
-        cache['umeng__Authorization']=base64.b64encode(cache['umeng__auth_token'])
-        pickle.dump(cache,open(self.cache_file,'w+'))
+        Um_auth.cache['umeng__auth_token']=response['auth_token']
+        Um_auth.cache['umeng__Authorization']=base64.b64encode(Um_auth.cache['umeng__auth_token'])
+        pickle.dump(Um_auth.cache,open(self.cache_file,'w+'))
         print response
-        self.Authorization=cache['umeng__Authorization']
-        print 'auth token cached'
+        self.Authorization=Um_auth.cache['umeng__Authorization']
+        print 'auth token cached. (finished re-auth)'
 
 
 
@@ -75,30 +82,47 @@ def retrive_umeng(appkey,api,date_start,date_end,args={}):
     url="http://api.umeng.com/%s?appkey=%s&period_type=%s&start_date=%s&end_date=%s"%(
             api,appkey,period_type,date_start,date_end)
     req=urllib2.Request(url)
-    req.add_header('Authorization','Basic %s' %(cache['umeng__Authorization']))
-    body_raw=urllib2.urlopen(req).read()
+    req.add_header('Authorization','Basic %s' %(Um_auth.cache['umeng__Authorization']))
+    f=urllib2.urlopen(req)
+    body_raw=f.read()
     response=json.loads(body_raw)
-    #print "retrive data: \n",response
 
-    #try:
     if True:
         rows=[]
         items_label=response['dates']
         for key in response['data']:
             items_values=response['data'][key]
-        print items_label,items_values
+        #print items_label,items_values
         timestamp=int(time.time())
         for i in range(len(items_label)):
             rows.append((items_label[i],items_values[i]))
         return rows
-    #except:
-    #    print "retrive data Error from response.json\n",response
 
 
-
+# 根据字符串形的起止日期、步长天数，拆分出一系列以列表存储的起止日期元组
+# 若起止日期间隔小于1天，则返回最近两天的间隔元组，目的是至少更新最近两天的数据
+def batch_date_range(start,end,step=30):
+    s=datetime.datetime.strptime(start,'%Y-%m-%d')
+    e=datetime.datetime.strptime(end,'%Y-%m-%d')
+    if (e-s).days <= 1:
+        s=e-datetime.timedelta(days=1)
+    cnt=int(math.ceil(float((e-s).days)/step))
+    #template [ (s+it*t,s+(it+1)*t-1) for it in range(part_count)]
+    rtn=[(  (s+datetime.timedelta(days=it*step)).strftime('%Y-%m-%d')
+           ,(s+datetime.timedelta(days=(it+1)*step-1)).strftime('%Y-%m-%d')
+         ) for it in range(cnt)]
+    max_index=len(rtn)-1
+    if max_index >=0:
+        rtn[max_index]=(rtn[max_index][0],end)
+    return rtn
 
 #-------------------------------------------------------------------------------
 
+
+try:
+    cache=pickle.load(open(cfg['main']['cache_file_name'],'r'))
+except:
+    cache={}
 
 um_auth=Um_auth(cfg.main['cache_file_name'],cfg.umeng['email'],cfg.umeng['password'])
 umeng__Authorization=um_auth.Authorization
@@ -113,11 +137,11 @@ for it in cfg.um_source:
     date_start=it['start']
     today=datetime.date.today()
     date_end=today.strftime('%Y-%m-%d')
-    print '\n[%s] %s'%(appkey,appname)
+    print '\nAPP: [%s] %s'%(appkey,appname)
     #UV
     #检查存储文件中是否存在
     filepath=script_dir+'data/'+applabel+'_uv.csv'
-    print filepath
+    print "storage: %s"%filepath
     header=['date','num']
     lines_dict={}
     lines_keys=[]
@@ -132,10 +156,14 @@ for it in cfg.um_source:
                     lines_dict[line[0]]=line[1]
                     lines_keys.append(line[0])
                     date_start=line[0]
-    print 'date_start: ',date_start
+    print 'to fetch date range: %s ~ %s' %(date_start,date_end)
     if True:
-        # TODO 对于过长的时间段，要分多批进行
-        rows=retrive_umeng(appkey,'active_users',date_start,date_end,args={})
+        # 按30天分段，多批进行；日期间隔过长时，友盟返回部分数据有0的空缺
+        ranges=batch_date_range(date_start,date_end,30)
+        rows=[]
+        for item in ranges:
+            print '(%s ~ %s)... '%(item[0],item[1]),
+            rows+=retrive_umeng(appkey,'active_users',item[0],item[1],args={})
         rows=[(it[0].encode('utf-8'),'%s'%it[1]) for it in rows]
 
         #合并 rows 到 lines
@@ -149,6 +177,8 @@ for it in cfg.um_source:
             f_csv=csv.writer(fp)
             f_csv.writerow(header)
             f_csv.writerows(lines)
+
+    print ''
 
 exit()
 
