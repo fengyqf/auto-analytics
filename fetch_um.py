@@ -17,9 +17,7 @@ import math
 import appconfig as cfg
 
 script_dir=os.path.split(os.path.realpath(__file__))[0]+'/'
-
 config_file=script_dir+'/config.ini'
-
 
 
 
@@ -118,7 +116,7 @@ def batch_date_range(start,end,step=30):
 
 
 
-def fetch_and_save(api,filepath,header,date_start,date_end):
+def fetch_and_save(appkey,api,filepath,header,date_start,date_end):
     print "storage: %s"%filepath
     lines_dict={}
     lines_keys=[]
@@ -140,7 +138,7 @@ def fetch_and_save(api,filepath,header,date_start,date_end):
         rows=[]
         for item in ranges:
             print '(%s ~ %s)... '%(item[0],item[1]),
-            rows+=retrive_umeng(appkey,'active_users',item[0],item[1],args={})
+            rows+=retrive_umeng(appkey,api,item[0],item[1],args={})
         rows=[(it[0].encode('utf-8'),'%s'%it[1]) for it in rows]
 
         #合并 rows 到 lines
@@ -158,15 +156,11 @@ def fetch_and_save(api,filepath,header,date_start,date_end):
     print ''
 
 
+def retrive_retentions(appkey,filepath,date_start,date_end):
+    pass
 
 
 #-------------------------------------------------------------------------------
-
-
-try:
-    cache=pickle.load(open(cfg['main']['cache_file_name'],'r'))
-except:
-    cache={}
 
 um_auth=Um_auth(cfg.main['cache_file_name'],cfg.umeng['email'],cfg.umeng['password'])
 umeng__Authorization=um_auth.Authorization
@@ -183,130 +177,13 @@ for it in cfg.um_source:
     date_end=today.strftime('%Y-%m-%d')
     print '\nAPP: [%s] %s'%(appkey,appname)
 
-
     for um_api in ['new_users','active_users','launches']:
         filepath=script_dir+'data/'+applabel+'_'+um_api+'.csv'
         header=['date','num']
-        fetch_and_save(um_api,filepath,header,date_start,date_end)
-
-
-exit()
-
-if 1==2:
-    #UV
-    #检查存储文件中是否存在
-    filepath=script_dir+'data/'+applabel+'_uv.csv'
-    print "storage: %s"%filepath
-    header=['date','num']
-    lines_dict={}
-    lines_keys=[]
-    if not os.path.isfile(filepath):
-        pass
-    else:
-        with open(filepath,'rb') as fp:
-            f_csv=csv.reader(fp)
-            next(f_csv)
-            for line in f_csv:
-                if line:
-                    lines_dict[line[0]]=line[1]
-                    lines_keys.append(line[0])
-                    date_start=line[0]
-    print 'to fetch date range: %s ~ %s' %(date_start,date_end)
-    if True:
-        # 按30天分段，多批进行；日期间隔过长时，友盟返回部分数据有0的空缺
-        ranges=batch_date_range(date_start,date_end,30)
-        rows=[]
-        for item in ranges:
-            print '(%s ~ %s)... '%(item[0],item[1]),
-            rows+=retrive_umeng(appkey,'active_users',item[0],item[1],args={})
-        rows=[(it[0].encode('utf-8'),'%s'%it[1]) for it in rows]
-
-        #合并 rows 到 lines
-        for row in rows:
-            lines_dict[row[0]]=row[1]
-        line_keys=list(lines_dict)
-        line_keys.sort()
-        lines=[(it,lines_dict[it]) for it in line_keys]
-
-        with open(filepath,'w+') as fp:
-            f_csv=csv.writer(fp)
-            f_csv.writerow(header)
-            f_csv.writerows(lines)
-
-    print ''
-
-exit()
+        fetch_and_save(appkey,um_api,filepath,header,date_start,date_end)
 
 
 
 
 
 
-
-today=datetime.date.today()
-date_end=today.strftime('%Y-%m-%d')
-date_start=(today-datetime.timedelta(days=5)).strftime('%Y-%m-%d')
-
-print date_start,date_end
-
-appkey='57317f1fe0f55a765300216c'
-api='active_users'
-
-def fetch_umeng(conn,appkey,api,date_start,date_end,args={}):
-    try:
-        period_type=args['period_type']
-    except:
-        period_type='daily'
-
-    args_s=''
-    args_keys=args.keys()
-    if args_keys:
-        for k in args_keys.sort():
-            args_s=args_s+'~'+k+'~'+args[k]
-    param_string='%s~%s~~%s'%(appkey,api,args_s)
-    hashing=hash(param_string)
-    print hashing
-    print param_string
-
-    days_count=(datetime.datetime.strptime(date_end, '%Y-%m-%d')-datetime.datetime.strptime(date_start, '%Y-%m-%d')).days
-    print "days_count: ",days_count
-
-    #检查line中条数是否正确，忽略当日
-
-    url="http://api.umeng.com/%s?appkey=%s&period_type=%s&start_date=%s&end_date=%s"%(
-            api,appkey,period_type,date_start,date_end)
-    req=urllib2.Request(url)
-    req.add_header('Authorization','Basic %s' %(cache['umeng__Authorization']))
-    body_raw=urllib2.urlopen(req).read()
-    response=json.loads(body_raw)
-
-    #try:
-    if True:
-        items_label=response['dates']
-        for key in response['data']:
-            items_values=response['data'][key]
-        print items_label,items_values
-        values=[]
-        timestamp=int(time.time())
-        for i in range(len(items_label)):
-            values.append((hashing,items_values[i],timestamp,date2int(items_label[i])))
-        val_batch=tuple(values)
-        print val_batch
-        sql="""insert into `data` (`hashing`,`val`,`batch`,`day`)\
-            values(%s,%s,%s,%s)"""
-        cursor.executemany(sql,val_batch)
-    #except:
-    #    print "retrive data Error from response.json\n",response
-
-
-def date2int(txt):
-    d=datetime.datetime.strptime(txt, '%Y-%m-%d')
-    return d.year*10000+d.month*100+d.day
-
-def int2date(di):
-    return '%d-%02d-%02d'%(di/10000,di%1000/100,di%100)
-
-
-#fetch_umeng(conn,appkey,api,date_start,date_end)
-
-retrive_umeng(conn,appkey,api,date_start,date_end)
