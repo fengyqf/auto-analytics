@@ -116,6 +116,50 @@ def batch_date_range(start,end,step=30):
         rtn[max_index]=(rtn[max_index][0],end)
     return rtn
 
+
+
+def fetch_and_save(api,filepath,header,date_start,date_end):
+    print "storage: %s"%filepath
+    lines_dict={}
+    lines_keys=[]
+    if not os.path.isfile(filepath):
+        pass
+    else:
+        with open(filepath,'rb') as fp:
+            f_csv=csv.reader(fp)
+            next(f_csv)
+            for line in f_csv:
+                if line:
+                    lines_dict[line[0]]=line[1]
+                    lines_keys.append(line[0])
+                    date_start=line[0]
+    print 'to fetch date range: %s ~ %s' %(date_start,date_end)
+    if True:
+        # 按30天分段，多批进行；日期间隔过长时，友盟返回部分数据有0的空缺
+        ranges=batch_date_range(date_start,date_end,30)
+        rows=[]
+        for item in ranges:
+            print '(%s ~ %s)... '%(item[0],item[1]),
+            rows+=retrive_umeng(appkey,'active_users',item[0],item[1],args={})
+        rows=[(it[0].encode('utf-8'),'%s'%it[1]) for it in rows]
+
+        #合并 rows 到 lines
+        for row in rows:
+            lines_dict[row[0]]=row[1]
+        line_keys=list(lines_dict)
+        line_keys.sort()
+        lines=[(it,lines_dict[it]) for it in line_keys]
+
+        with open(filepath,'w+') as fp:
+            f_csv=csv.writer(fp)
+            f_csv.writerow(header)
+            f_csv.writerows(lines)
+
+    print ''
+
+
+
+
 #-------------------------------------------------------------------------------
 
 
@@ -138,6 +182,17 @@ for it in cfg.um_source:
     today=datetime.date.today()
     date_end=today.strftime('%Y-%m-%d')
     print '\nAPP: [%s] %s'%(appkey,appname)
+
+    um_api='active_users'
+    filepath=script_dir+'data/'+applabel+'_'+um_api+'.csv'
+    header=['date','num']
+
+    fetch_and_save(um_api,filepath,header,date_start,date_end)
+
+
+exit()
+
+if 1==2:
     #UV
     #检查存储文件中是否存在
     filepath=script_dir+'data/'+applabel+'_uv.csv'
