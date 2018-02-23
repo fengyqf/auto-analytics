@@ -16,10 +16,6 @@ import math
 
 import appconfig as cfg
 
-script_dir=os.path.split(os.path.realpath(__file__))[0]+'/'
-config_file=script_dir+'/config.ini'
-
-
 
 
 class Um_auth:
@@ -217,35 +213,38 @@ def retrive_retentions(appkey,filepath,date_start,date_end,args={}):
 
 
 #-------------------------------------------------------------------------------
+def run():
+    script_dir=os.path.split(os.path.realpath(__file__))[0]+'/'
+    config_file=script_dir+'/config.ini'
 
-um_auth=Um_auth(cfg.main['cache_file_name'],cfg.umeng['email'],cfg.umeng['password'])
-umeng__Authorization=um_auth.Authorization
+    um_auth=Um_auth(cfg.main['cache_file_name'],cfg.umeng['email'],cfg.umeng['password'])
+    umeng__Authorization=um_auth.Authorization
 
-print "umeng__Authorization:",umeng__Authorization
+    print "umeng__Authorization:",umeng__Authorization
 
-um_keys=[it['appkey'] for it in cfg.um_source]
-for it in cfg.um_source:
-    appname=it['name']
-    applabel=it['label']
-    appkey=it['appkey']
-    date_start=it['start']
-    today=datetime.date.today()
-    date_end=today.strftime('%Y-%m-%d')
-    print '\nAPP: [%s] %s'%(appkey,appname)
+    um_keys=[it['appkey'] for it in cfg.um_source]
+    for it in cfg.um_source:
+        appname=it['name']
+        applabel=it['label']
+        appkey=it['appkey']
+        date_start=it['start']
+        today=datetime.date.today()
+        date_end=today.strftime('%Y-%m-%d')
+        print '\nAPP: [%s] %s'%(appkey,appname)
 
-    um_api='retentions'
-    header=['date','num']
-    filepath=script_dir+'data/'+applabel+'_'+um_api+'.csv'
-    retrive_retentions(appkey,filepath,date_start,date_end)
+        um_api='retentions'
+        filepath = script_dir+'data/'+applabel+'_'+um_api+'.csv'
+        retrive_retentions(appkey,filepath,date_start,date_end)
 
-    for um_api in ['new_users','active_users','launches']:
-        filepath=script_dir+'data/'+applabel+'_'+um_api+'.csv'
-        header=['date','num']
-        fetch_and_save(appkey,um_api,filepath,header,date_start,date_end)
-    print ''
-
+        for um_api in ['new_users','active_users','launches']:
+            filepath=script_dir+'data/'+applabel+'_'+um_api+'.csv'
+            csv_header=['date','num']
+            fetch_and_save(appkey,um_api,filepath,csv_header,date_start,date_end)
+        print ''
 
 
 
+if __name__ == '__main__':
+    run()
 
 
