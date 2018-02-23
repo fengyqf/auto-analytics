@@ -136,9 +136,9 @@ def fetch_and_save(appkey,api,filepath,header,date_start,date_end):
         # 按30天分段，多批进行；日期间隔过长时，友盟返回部分数据有0的空缺
         ranges=batch_date_range(date_start,date_end,30)
         rows=[]
-        for item in ranges:
-            print '(%s ~ %s)... '%(item[0],item[1]),
-            rows+=retrive_umeng(appkey,api,item[0],item[1],args={})
+        for rng in ranges:
+            print '(%s ~ %s)... '%(rng[0],rng[1]),
+            rows+=retrive_umeng(appkey,api,rng[0],rng[1],args={})
         rows=[(it[0].encode('utf-8'),'%s'%it[1]) for it in rows]
 
         #合并 rows 到 lines
@@ -152,12 +152,68 @@ def fetch_and_save(appkey,api,filepath,header,date_start,date_end):
             f_csv=csv.writer(fp)
             f_csv.writerow(header)
             f_csv.writerows(lines)
-
     print ''
 
 
-def retrive_retentions(appkey,filepath,date_start,date_end):
-    pass
+def retrive_retentions(appkey,filepath,date_start,date_end,args={}):
+    try:
+        period_type=args['period_type']
+        rate_count=9999    #留存率数值个数，写csv时按该值补空列
+        csv_header=()
+    except:
+        period_type='daily'
+        rate_count=9
+        csv_header=('date','1d','2d','3d','4d','5d','6d','7d','14d','30d')
+
+    if period_type!='daily':
+        print "[retrive_retentions] Not implement, unless by daily"
+        exit()
+
+    print "storage: %s"%filepath
+    lines_dict={}
+    if not os.path.isfile(filepath):
+        pass
+    else:
+        with open(filepath,'rb') as fp:
+            f_csv=csv.reader(fp)
+            next(f_csv)
+            for line in f_csv:
+                if line:
+                    lines_dict[line[0]]=tuple(line[1:])
+                    csv_date=line[0]
+    try:
+        #date_start 按csv_date再往前提50天，以获取完整的留存数据列
+        date_start=(datetime.datetime.strptime(csv_date,'%Y-%m-%d')-datetime.timedelta(days=50)).strftime('%Y-%m-%d')
+    except:
+        pass
+    print 'to fetch date range: %s ~ %s' %(date_start,date_end)
+
+    ranges=batch_date_range(date_start,date_end,30)
+    for rng in ranges:
+        print '(%s ~ %s)... '%(rng[0],rng[1]),
+        url="http://api.umeng.com/%s?appkey=%s&period_type=%s&start_date=%s&end_date=%s"%(
+                'retentions',appkey,period_type,rng[0],rng[1])
+        req=urllib2.Request(url)
+        req.add_header('Authorization','Basic %s' %(Um_auth.cache['umeng__Authorization']))
+        f=urllib2.urlopen(req)
+        body_raw=f.read()
+        response=json.loads(body_raw)
+
+        for item in response:
+            label=item['install_period'].encode('utf-8')
+            rates=[str(rate) for rate in item['retention_rate']]
+            rates+=['']*(rate_count-len(rates))
+            lines_dict[label]=tuple(rates)
+    print ''
+
+    keys=lines_dict.keys()
+    keys.sort()
+    lines=[(k,)+lines_dict[k]  for k in keys]
+    with open(filepath,'w+') as fp:
+        f_csv=csv.writer(fp)
+        f_csv.writerow(csv_header)
+        f_csv.writerows(lines)
+
 
 
 #-------------------------------------------------------------------------------
@@ -177,10 +233,16 @@ for it in cfg.um_source:
     date_end=today.strftime('%Y-%m-%d')
     print '\nAPP: [%s] %s'%(appkey,appname)
 
+    um_api='retentions'
+    header=['date','num']
+    filepath=script_dir+'data/'+applabel+'_'+um_api+'.csv'
+    retrive_retentions(appkey,filepath,date_start,date_end)
+
     for um_api in ['new_users','active_users','launches']:
         filepath=script_dir+'data/'+applabel+'_'+um_api+'.csv'
         header=['date','num']
         fetch_and_save(appkey,um_api,filepath,header,date_start,date_end)
+    print ''
 
 
 
